@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: tio-higno-barbearia
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    disk:
+      name: tio-higno-sqlite
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_SQLITE_PATH
+        value: /var/data/tio_higno.sqlite

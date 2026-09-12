@@ -1,0 +1,168 @@
+{
+  "services": [
+    {
+      "id": "svc-cut",
+      "name": "Corte Premium",
+      "description": "Corte personalizado + acabamento",
+      "duration": 45,
+      "price": 45,
+      "icon": "✂️",
+      "active": true
+    },
+    {
+      "id": "svc-beard",
+      "name": "Barba",
+      "description": "Modelagem, toalha quente e acabamento",
+      "duration": 30,
+      "price": 35,
+      "icon": "🧔",
+      "active": true
+    },
+    {
+      "id": "svc-combo",
+      "name": "Corte + Barba",
+      "description": "Experiência completa Tio Higno",
+      "duration": 70,
+      "price": 70,
+      "icon": "👑",
+      "active": true
+    },
+    {
+      "id": "svc-kids",
+      "name": "Corte Infantil",
+      "description": "Corte com atenção especial aos pequenos",
+      "duration": 40,
+      "price": 40,
+      "icon": "⭐",
+      "active": true
+    },
+    {
+      "id": "svc-finish",
+      "name": "Pezinho / Acabamento",
+      "description": "Contorno e acabamento rápido",
+      "duration": 20,
+      "price": 20,
+      "icon": "⚡",
+      "active": true
+    },
+    {
+      "id": "svc-brow",
+      "name": "Sobrancelha",
+      "description": "Alinhamento e acabamento",
+      "duration": 15,
+      "price": 15,
+      "icon": "✨",
+      "active": true
+    }
+  ],
+  "barbers": [
+    {
+      "id": "barber-higno",
+      "name": "Higno",
+      "role": "Barbeiro Master",
+      "initials": "TH",
+      "workDays": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "start": "09:00",
+      "end": "21:00",
+      "workPeriods": [
+        [
+          "09:00",
+          "11:30"
+        ],
+        [
+          "13:30",
+          "21:00"
+        ]
+      ],
+      "active": true
+    },
+    {
+      "id": "barber-matheus",
+      "name": "Matheus",
+      "role": "Barbeiro",
+      "initials": "MT",
+      "workDays": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "start": "09:00",
+      "end": "21:00",
+      "workPeriods": [
+        [
+          "09:00",
+          "11:30"
+        ],
+        [
+          "13:30",
+          "21:00"
+        ]
+      ],
+      "active": true
+    },
+    {
+      "id": "adc14d02-295c-4d90-895d-1ce12bd012df",
+      "name": "Caio",
+      "role": "Barbeiro",
+      "initials": "CA",
+      "workDays": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "start": "09:00",
+      "end": "21:00",
+      "workPeriods": [
+        [
+          "09:00",
+          "11:30"
+        ],
+        [
+          "13:30",
+          "21:00"
+        ]
+      ],
+      "active": true
+    }
+  ],
+  "bookings": [
+    {
+      "id": "f5c497ad-e1a9-4daa-bf40-cdc4770c49f8",
+      "code": "TH-WUWI6",
+      "serviceId": "svc-finish",
+      "barberId": "barber-higno",
+      "date": "2026-09-12",
+      "time": "20:30",
+      "duration": 20,
+      "price": 20,
+      "name": "dfuhsdiufhsudhf",
+      "phone": "64996672502",
+      "notes": "",
+      "status": "completed",
+      "createdAt": "2026-09-12T05:51:46.226Z"
+    }
+  ],
+  "blockedSlots": [],
+  "settings": {
+    "businessName": "Tio Higno Barbearia",
+    "tagline": "Seu estilo. Seu horário.",
+    "phone": "(64) 99662-8700",
+    "whatsapp": "556499662-8700",
+    "address": "Av. Minas Gerais, Qd l1 lote 03",
+    "instagram": "@tiohignobarbearia",
+    "adminPassword": "Barber12"
+  }
+}
