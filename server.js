@@ -92,9 +92,9 @@ function readDb(){
     role: b.role,
     initials: b.initials,
     workDays: JSON.parse(b.workDays),
-    start: b.start,
-    end: b.end,
-    workPeriods: JSON.parse(b.workPeriods),
+    start: validTime(b.start) ? b.start : DEFAULT_START,
+    end: validTime(b.end) ? b.end : DEFAULT_END,
+    workPeriods: normalizeWorkPeriods(JSON.parse(b.workPeriods)),
     active: Boolean(b.active)
   }));
 
