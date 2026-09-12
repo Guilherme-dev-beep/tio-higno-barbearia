@@ -163,6 +163,21 @@ const validTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t||'');
 const toMin = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
 const DEFAULT_START = '08:00';
 const DEFAULT_END = '22:00';
+const BUSINESS_TZ = 'America/Sao_Paulo';
+function getBusinessNowParts(date = new Date()){
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.filter(p => p.type !== 'literal').map(p => [p.type, p.value]));
+  const hour = Number(map.hour || 0);
+  const minute = Number(map.minute || 0);
+  const year = Number(map.year);
+  const month = Number(map.month);
+  const day = Number(map.day);
+  return { dateIso: `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`, nowMinutes: hour*60+minute };
+}
 const defaultWorkPeriods = [[DEFAULT_START, '12:00'], ['13:00', DEFAULT_END]];
 const normalizeWorkPeriods = periods => {
   if (!Array.isArray(periods)) return defaultWorkPeriods.map(p => [p[0], p[1]]);
@@ -262,16 +277,14 @@ async function handleApi(req,res,url){
     const db=readDb(),barber=db.barbers.find(b=>b.id===barberId&&b.active),service=db.services.find(s=>s.id===serviceId&&s.active);
     if(!barber||!service)return json(res,404,{error:'Barbeiro ou serviço não encontrado.'});
     const day=new Date(`${date}T12:00:00`).getDay();if(!barber.workDays.includes(day))return json(res,200,{slots:[]});
-    const now = new Date();
-    const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-    const nowMinutes = now.getHours()*60 + now.getMinutes();
+    const nowParts = getBusinessNowParts();
     let slots=[];
     for(const [start,end] of availablePeriods(barber)){
       for(let t=toMin(start);t+service.duration<=toMin(end);t+=30){
         const time=`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
         const slotMinutes = toMin(time);
-        const dateIsToday = date === todayIso;
-        if(dateIsToday && slotMinutes < nowMinutes) continue;
+        const dateIsToday = date === nowParts.dateIso;
+        if(dateIsToday && slotMinutes < nowParts.nowMinutes) continue;
         const occ=db.bookings.some(b=>b.date===date&&b.barberId===barberId&&b.status!=='cancelled'&&overlaps(time,service.duration,b.time,b.duration));
         const blk=db.blockedSlots.some(b=>b.date===date&&b.barberId===barberId&&overlaps(time,service.duration,b.time,b.duration||30));
         if(!occ&&!blk)slots.push(time)
