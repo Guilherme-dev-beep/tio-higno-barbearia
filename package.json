@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "description": "Site premium de agendamento e painel administrativo da Tio Higno Barbearia",
   "main": "server.js",
-  "scripts": {"start": "node server.js", "dev": "node server.js"},
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
   "dependencies": {}
 }
