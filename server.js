@@ -161,7 +161,9 @@ const clean = (v='', max=160) => String(v).replace(/[<>]/g,'').trim().slice(0,ma
 const validDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d||'');
 const validTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t||'');
 const toMin = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
-const defaultWorkPeriods = [['09:00','11:30'],['13:30','21:00']];
+const DEFAULT_START = '08:00';
+const DEFAULT_END = '22:00';
+const defaultWorkPeriods = [[DEFAULT_START, DEFAULT_END]];
 const normalizeWorkPeriods = periods => {
   if (!Array.isArray(periods)) return defaultWorkPeriods.map(p => [p[0], p[1]]);
   const rows = [];
@@ -172,7 +174,7 @@ const normalizeWorkPeriods = periods => {
   }
   return rows.length ? rows : defaultWorkPeriods.map(p => [p[0], p[1]]);
 };
-const availablePeriods = barber => barber.workPeriods || defaultWorkPeriods;
+const availablePeriods = barber => barber.workPeriods && barber.workPeriods.length ? barber.workPeriods : defaultWorkPeriods;
 const isAvailable = (barber,time,duration) => availablePeriods(barber).some(([start,end]) => toMin(time)>=toMin(start)&&toMin(time)+Number(duration)<=toMin(end));
 const overlaps = (a,da,b,db) => { const a1=toMin(a), b1=toMin(b); return a1 < b1+Number(db) && b1 < a1+Number(da); };
 async function sendWhatsAppConfirmation(booking,service,barber,settings){
@@ -309,7 +311,7 @@ async function handleApi(req,res,url){
   if(method==='POST'&&p==='/api/admin/services'){const x=await parseBody(req),db=readDb(),s={id:crypto.randomUUID(),name:clean(x.name,80),description:clean(x.description,140),duration:Number(x.duration||30),price:Number(x.price||0),icon:clean(x.icon||'✂️',8),active:true};if(!s.name||s.duration<5||s.price<0)return json(res,400,{error:'Serviço inválido.'});db.services.push(s);writeDb(db);return json(res,201,s);}
   m=p.match(/^\/api\/admin\/services\/([^/]+)$/);if(method==='PATCH'&&m){const x=await parseBody(req),db=readDb(),s=db.services.find(v=>v.id===m[1]);if(!s)return json(res,404,{error:'Serviço não encontrado.'});['name','description','icon'].forEach(k=>{if(x[k]!==undefined)s[k]=clean(x[k],k==='description'?140:80)});['duration','price'].forEach(k=>{if(x[k]!==undefined)s[k]=Number(x[k])});if(x.active!==undefined)s.active=Boolean(x.active);writeDb(db);return json(res,200,s);}
   if(method==='DELETE'&&m){const db=readDb(),hasBookings=db.bookings.some(v=>v.serviceId===m[1]);if(hasBookings)return json(res,409,{error:'Não é possível excluir um serviço com agendamentos. Inative-o em Editar.'});const index=db.services.findIndex(v=>v.id===m[1]);if(index<0)return json(res,404,{error:'Serviço não encontrado.'});db.services.splice(index,1);writeDb(db);return json(res,200,{ok:true});}
-  if(method==='POST'&&p==='/api/admin/barbers'){const x=await parseBody(req),db=readDb(),b={id:crypto.randomUUID(),name:clean(x.name,70),role:clean(x.role||'Barbeiro',70),initials:clean(x.initials||'TH',3).toUpperCase(),workDays:Array.isArray(x.workDays)?x.workDays:[1,2,3,4,5,6],start:validTime(x.start)?x.start:'09:00',end:validTime(x.end)?x.end:'21:00',workPeriods:normalizeWorkPeriods(x.workPeriods),active:true};if(!b.name)return json(res,400,{error:'Nome obrigatório.'});db.barbers.push(b);writeDb(db);return json(res,201,b);}
+  if(method==='POST'&&p==='/api/admin/barbers'){const x=await parseBody(req),db=readDb(),b={id:crypto.randomUUID(),name:clean(x.name,70),role:clean(x.role||'Barbeiro',70),initials:clean(x.initials||'TH',3).toUpperCase(),workDays:Array.isArray(x.workDays)?x.workDays:[1,2,3,4,5,6],start:validTime(x.start)?x.start:DEFAULT_START,end:validTime(x.end)?x.end:DEFAULT_END,workPeriods:normalizeWorkPeriods([[DEFAULT_START, DEFAULT_END]]),active:true};if(!b.name)return json(res,400,{error:'Nome obrigatório.'});db.barbers.push(b);writeDb(db);return json(res,201,b);}
   m=p.match(/^\/api\/admin\/barbers\/([^/]+)$/);if(method==='PATCH'&&m){const x=await parseBody(req),db=readDb(),b=db.barbers.find(v=>v.id===m[1]);if(!b)return json(res,404,{error:'Barbeiro não encontrado.'});['name','role','initials'].forEach(k=>{if(x[k]!==undefined)b[k]=clean(x[k],70)});if(validTime(x.start))b.start=x.start;if(validTime(x.end))b.end=x.end;if(Array.isArray(x.workPeriods))b.workPeriods=normalizeWorkPeriods(x.workPeriods);if(Array.isArray(x.workDays))b.workDays=x.workDays.map(Number);if(x.active!==undefined)b.active=Boolean(x.active);writeDb(db);return json(res,200,b);}
   if(method==='DELETE'&&m){const db=readDb(),hasBookings=db.bookings.some(v=>v.barberId===m[1]);if(hasBookings)return json(res,409,{error:'Não é possível excluir um barbeiro com agendamentos. Inative-o em Editar.'});const index=db.barbers.findIndex(v=>v.id===m[1]);if(index<0)return json(res,404,{error:'Barbeiro não encontrado.'});db.barbers.splice(index,1);writeDb(db);return json(res,200,{ok:true});}
   m=p.match(/^\/api\/admin\/clients\/(.+)$/);if(method==='DELETE'&&m){const phone=decodeURIComponent(m[1]),db=readDb(),before=db.bookings.length;db.bookings=db.bookings.filter(v=>v.phone!==phone);if(before===db.bookings.length)return json(res,404,{error:'Cliente não encontrado.'});writeDb(db);return json(res,200,{ok:true});}
