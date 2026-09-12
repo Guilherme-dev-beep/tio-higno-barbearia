@@ -42,6 +42,21 @@ function request(method, path, headers = {}, body) {
   const availability = await request('GET', `/api/availability?date=${date}&barberId=barber-higno&serviceId=svc-cut`);
   console.log('availability', availability.status, Array.isArray(availability.data.slots) ? availability.data.slots.length : 'bad');
 
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const nowMinutes = today.getHours() * 60 + today.getMinutes();
+  const todaysAvailability = await request('GET', `/api/availability?date=${todayIso}&barberId=barber-higno&serviceId=svc-cut`);
+  const pastTodaySlots = Array.isArray(todaysAvailability.data.slots) ? todaysAvailability.data.slots.filter(slot => {
+    const [h, m] = slot.split(':').map(Number);
+    return h * 60 + m < nowMinutes;
+  }) : [];
+  if (pastTodaySlots.length) {
+    console.log('expiredSameDaySlotsVisible', pastTodaySlots.length);
+    process.exitCode = 1;
+  } else {
+    console.log('expiredSameDaySlotsVisible', 0);
+  }
+
   const firstSlot = availability.data.slots && availability.data.slots[0];
   const booking = await request('POST', '/api/bookings', {}, {
     serviceId: 'svc-cut', barberId: 'barber-higno', date, time: firstSlot || '09:00', name: 'Teste', phone: '64999999999', notes: ''
