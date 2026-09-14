@@ -51,8 +51,16 @@ Configure manualmente um Volume persistente montado em `/data` e defina as vari�
 ```text
 DATABASE_PATH=/data/tio_higno.sqlite
 APP_TIMEZONE=America/Sao_Paulo
+META_APP_SECRET=seu-segredo-da-meta
 ```
 
 O `railway.json` deste projeto define build e start, mas não cria volumes persistentes. Sem esse Volume no painel da Railway, o filesystem do serviço pode ser recriado após um deploy.
 
-> Para uso comercial em produção, recomenda-se migrar o banco JSON para PostgreSQL/MySQL e implementar autenticação com senha criptografada, HTTPS, backups e integração oficial de WhatsApp/pagamentos.
+## Hardening
+
+- O painel administrativo usa sessão server-side em cookie `HttpOnly`, `SameSite=Lax` e `Secure` em produção.
+- O webhook da Meta exige `META_APP_SECRET` e valida `X-Hub-Signature-256`.
+- Agendamentos ativos têm índice único por barbeiro, data e horário.
+- Execute `npm test` para validar login, sessão, logout, concorrência, validações e webhook inválido em banco temporário.
+
+Para produção, mantenha o SQLite em armazenamento persistente, use HTTPS, configure backups e forneça as credenciais oficiais do WhatsApp exclusivamente por variáveis de ambiente.

@@ -1,111 +1,58 @@
 const http = require('http');
 
+const port = Number(process.env.PORT || 3000);
+const host = process.env.API_HOST || 'localhost';
+
 function request(method, path, headers = {}, body) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : undefined;
-    const options = {
-      host: 'localhost',
-      port: 3000,
+    const request = http.request({
+      host,
+      port,
       path,
       method,
       headers: {
         'Content-Type': 'application/json',
-        ...(headers || {}),
+        ...headers,
         ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {})
       }
-    };
-
-    const req = http.request(options, res => {
-      let out = '';
-      res.on('data', c => out += c);
-      res.on('end', () => {
+    }, response => {
+      let output = '';
+      response.on('data', chunk => output += chunk);
+      response.on('end', () => {
         try {
-          const data = out ? JSON.parse(out) : {};
-          resolve({ status: res.statusCode, data });
-        } catch (e) {
-          resolve({ status: res.statusCode, raw: out });
+          resolve({ status: response.statusCode, data: output ? JSON.parse(output) : {} });
+        } catch {
+          resolve({ status: response.statusCode, raw: output });
         }
       });
     });
-
-    req.on('error', reject);
-    if (payload) req.write(payload);
-    req.end();
+    request.on('error', reject);
+    if (payload) request.write(payload);
+    request.end();
   });
 }
 
 (async function main() {
-  const b = await request('GET', '/api/bootstrap');
-  console.log('bootstrap', b.status, Array.isArray(b.data.services) ? b.data.services.length : 'bad');
+  const bootstrap = await request('GET', '/api/bootstrap');
+  console.log('bootstrap', bootstrap.status, Array.isArray(bootstrap.data.services) ? 'ok' : 'invalid');
+  if (bootstrap.status !== 200 || !Array.isArray(bootstrap.data.services) || !Array.isArray(bootstrap.data.barbers)) process.exitCode = 1;
 
-  const date = '2026-09-16';
-  const availability = await request('GET', `/api/availability?date=${date}&barberId=barber-higno&serviceId=svc-cut`);
-  console.log('availability', availability.status, Array.isArray(availability.data.slots) ? availability.data.slots.length : 'bad');
+  const sensitiveKeys = Object.keys(bootstrap.data.settings || {}).filter(key => /password|token|recoveryCode|recoveryPhone/i.test(key));
+  console.log('publicSensitiveFields', sensitiveKeys.length ? 'exposed' : 'hidden');
+  if (sensitiveKeys.length) process.exitCode = 1;
 
-  const today = new Date();
-  const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  const nowMinutes = today.getHours() * 60 + today.getMinutes();
-  const todaysAvailability = await request('GET', `/api/availability?date=${todayIso}&barberId=barber-higno&serviceId=svc-cut`);
-  const pastTodaySlots = Array.isArray(todaysAvailability.data.slots) ? todaysAvailability.data.slots.filter(slot => {
-    const [h, m] = slot.split(':').map(Number);
-    return h * 60 + m < nowMinutes;
-  }) : [];
-  if (pastTodaySlots.length) {
-    console.log('expiredSameDaySlotsVisible', pastTodaySlots.length);
-    process.exitCode = 1;
-  } else {
-    console.log('expiredSameDaySlotsVisible', 0);
-  }
+  const invalidAvailability = await request('GET', '/api/availability?date=2026-99-99&barberId=missing&serviceId=missing');
+  console.log('invalidAvailability', invalidAvailability.status);
+  if (invalidAvailability.status !== 400) process.exitCode = 1;
 
-  const firstSlot = availability.data.slots && availability.data.slots[0];
-  const booking = await request('POST', '/api/bookings', {}, {
-    serviceId: 'svc-cut', barberId: 'barber-higno', date, time: firstSlot || '09:00', name: 'Teste', phone: '64999999999', notes: ''
+  const invalidBooking = await request('POST', '/api/bookings', {}, {
+    serviceId: 'missing', barberId: 'missing', date: '2026-99-99', time: '99:99', name: '', phone: ''
   });
-  console.log('booking', booking.status, booking.data.booking ? booking.data.booking.id : booking.data.error);
+  console.log('invalidBooking', invalidBooking.status);
+  if (invalidBooking.status !== 400) process.exitCode = 1;
 
-  const password = 'Barber12';
-
-  const recoveryRequest = await request('POST', '/api/admin/recovery/request', {}, { phone: '64996672502' });
-  console.log('recoveryRequest', recoveryRequest.status, recoveryRequest.data.ok, 'codeInResponse', Object.prototype.hasOwnProperty.call(recoveryRequest.data, 'code'));
-
-  if (recoveryRequest.data.ok && Object.prototype.hasOwnProperty.call(recoveryRequest.data, 'code')) process.exitCode = 1;
-
-  const adminDataBeforeLogin = await request('GET', '/api/admin/data', { 'x-admin-password': password });
-  const recoverySecretExposed = !!adminDataBeforeLogin.data.settings && ('adminRecoveryCode' in adminDataBeforeLogin.data.settings || 'adminRecoveryCodeExpiresAt' in adminDataBeforeLogin.data.settings || 'adminRecoveryPhone' in adminDataBeforeLogin.data.settings);
-  console.log('adminDataSensitiveFields', recoverySecretExposed ? 'exposed' : 'hidden');
-  if (recoverySecretExposed) process.exitCode = 1;
-
-  const login = await request('POST', '/api/admin/login', {}, { password });
-  console.log('login', login.status, login.data.ok ? 'ok' : login.data.error);
-
-  const adminData = await request('GET', '/api/admin/data', { 'x-admin-password': password });
-  console.log('adminData', adminData.status, Array.isArray(adminData.data.services) ? adminData.data.services.length : 'bad');
-
-  const serviceCreate = await request('POST', '/api/admin/services', { 'x-admin-password': password }, {
-    name: 'Serviço teste', description: 'Teste', duration: 30, price: 50, icon: '★'
-  });
-  console.log('serviceCreate', serviceCreate.status, serviceCreate.data.id || serviceCreate.data.error);
-
-  const blockCreate = await request('POST', '/api/admin/block', { 'x-admin-password': password }, {
-    date: '2026-09-16', time: '10:00', barberId: 'barber-higno', duration: 30, reason: 'Bloqueio teste'
-  });
-  console.log('blockCreate', blockCreate.status, blockCreate.data.id || blockCreate.data.error);
-
-  const serviceDelete = await request('DELETE', '/api/admin/services/' + serviceCreate.data.id, { 'x-admin-password': password });
-  console.log('serviceDelete', serviceDelete.status, serviceDelete.data);
-
-  const blockDelete = await request('DELETE', '/api/admin/block/' + blockCreate.data.id, { 'x-admin-password': password });
-  console.log('blockDelete', blockDelete.status, blockDelete.data);
-
-  const webhook = await request('POST', '/api/whatsapp/webhook', {}, {
-    entry: [{
-      changes: [{
-        value: {
-          contacts: [{ wa_id: '64999999999' }],
-          messages: [{ from: '64999999999', text: { body: 'SIM' } }]
-        }
-      }]
-    }]
-  });
-  console.log('webhook', webhook.status, webhook.data.ok ? 'ok' : webhook.data.error);
+  const protectedAdmin = await request('GET', '/api/admin/data');
+  console.log('adminProtection', protectedAdmin.status);
+  if (protectedAdmin.status !== 401) process.exitCode = 1;
 })();

@@ -82,3 +82,37 @@ Se houver falha:
 5. Rode `npm run db:check` antes de aceitar novas gravações.
 
 Nunca sobrescreva o único backup disponível.
+
+## Checklist pós-deploy
+
+- [ ] Abrir a URL pública e confirmar HTTP 200.
+- [ ] Confirmar `/api/bootstrap` e os assets principais.
+- [ ] Testar o site em 360px, 390px, 430px e 768px.
+- [ ] Testar login administrativo.
+- [ ] Confirmar endpoint admin protegido sem cookie com HTTP 401.
+- [ ] Confirmar logout e nova resposta HTTP 401 após o logout.
+- [ ] Criar um agendamento de teste.
+- [ ] Confirmar o agendamento no painel.
+- [ ] Cancelar o agendamento de teste.
+- [ ] Testar conflito de horário com HTTP 409.
+- [ ] Conferir logs sem senhas, tokens, cookies ou OTPs.
+- [ ] Confirmar `DATABASE_PATH` apontando para o volume persistente.
+- [ ] Confirmar o arquivo SQLite dentro do volume.
+- [ ] Reiniciar o serviço.
+- [ ] Confirmar que os dados continuam após o restart.
+- [ ] Testar envio do WhatsApp.
+- [ ] Validar webhook Meta com assinatura válida e inválida.
+- [ ] Verificar ausência de erros HTTP 500.
+- [ ] Executar `npm run db:check`.
+
+## Rollback
+
+1. Pare as gravações e coloque o serviço em manutenção.
+2. Preserve logs e o banco atual para investigação.
+3. Retorne o código para a versão anterior conhecida como estável.
+4. Só restaure o banco usando o backup pré-deploy se houver evidência de corrupção ou migration incompatível.
+5. Após qualquer restauração, execute `npm run db:check`.
+6. Reinicie o serviço e valide login, agenda, agendamento e cancelamento.
+7. Reabra as gravações somente depois das validações.
+
+Backup pré-deploy desta rodada: `backups/pre-deploy-tio-higno-2026-09-14-0857.sqlite`.
