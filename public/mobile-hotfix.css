@@ -6,6 +6,8 @@
     justify-content: center;
     gap: 20px;
     min-height: auto;
+    overflow: visible;
+    isolation: isolate;
   }
 
   .hero-content {
@@ -16,6 +18,8 @@
     align-items: center;
     justify-content: center;
     text-align: center;
+    position: relative;
+    z-index: 2;
   }
 
   .hero-actions {
@@ -25,15 +29,22 @@
     justify-content: center;
     gap: 12px;
     width: 100%;
+    position: relative;
+    z-index: 10;
+    pointer-events: auto;
   }
 
-  .hero-actions a {
+  .hero-actions a,
+  .hero-actions .btn {
     width: min(100%, 280px);
     min-height: 48px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto;
+    position: relative;
+    z-index: 10;
+    pointer-events: auto;
   }
 
   .hero-visual {
@@ -43,6 +54,16 @@
     align-items: center;
     justify-content: center;
     position: relative;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .hero-glow,
+  .hero-card,
+  .barber-art,
+  .floating-card,
+  .hero:before {
+    pointer-events: none;
   }
 
   .floating-card {
