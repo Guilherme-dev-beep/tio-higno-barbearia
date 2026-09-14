@@ -15,5 +15,5 @@ services:
         value: production
       - key: PORT
         value: 10000
-      - key: DB_SQLITE_PATH
+      - key: DATABASE_PATH
         value: /var/data/tio_higno.sqlite

@@ -3,5 +3,10 @@ node_modules/
 *.log
 npm-debug.log*
 .env
-.DS_Store
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
 *.sqlite-journal
+backups/

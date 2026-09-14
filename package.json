@@ -8,7 +8,10 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "db:backup": "node scripts/db-backup.js",
+    "db:check": "node scripts/db-check.js",
+    "db:migrate": "node scripts/db-migrate.js"
   },
   "dependencies": {}
 }

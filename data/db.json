@@ -163,7 +163,7 @@
     "whatsapp": "556499662-8700",
     "address": "Av. Minas Gerais, Qd l1 lote 03",
     "instagram": "@tiohignobarbearia",
-    "adminPassword": "Barber12",
+    "adminPasswordHash": "scrypt$tio-higno-seed-salt-2026$f5461fd565ef2f430106372d0e9d140f33ba9f554b8df4fb6c3ca277fec05211df85a710f034afeccd14b8a46d8e5b704a2eeb0c2196d6b9854a85ed037a7d40",
     "adminRecoveryCode": "",
     "adminRecoveryPhone": "5564996672502",
     "adminRecoveryCodeExpiresAt": null,

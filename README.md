@@ -16,10 +16,9 @@ Projeto completo de agendamento para barbearia com visual premium.
    - Site: http://localhost:3000
    - Painel: http://localhost:3000/admin
 
-## Acesso inicial do painel
+## Acesso ao painel
 
-- Senha: `admin123`
-- Altere em **Configurações > Segurança**.
+A senha administrativa é armazenada no SQLite somente como hash. Altere-a em **Configurações > Segurança** depois de acessar o painel.
 
 ## Recursos incluídos
 
@@ -43,6 +42,17 @@ Projeto completo de agendamento para barbearia com visual premium.
 
 ## Dados
 
-Os dados são gravados em `data/db.json`.
+O SQLite em `data/tio_higno.sqlite` é a fonte de verdade em runtime. O arquivo `data/db.json` é apenas um seed legado usado somente quando o banco ainda não possui configurações.
+
+## Produção na Railway
+
+Configure manualmente um Volume persistente montado em `/data` e defina as variáveis:
+
+```text
+DATABASE_PATH=/data/tio_higno.sqlite
+APP_TIMEZONE=America/Sao_Paulo
+```
+
+O `railway.json` deste projeto define build e start, mas não cria volumes persistentes. Sem esse Volume no painel da Railway, o filesystem do serviço pode ser recriado após um deploy.
 
 > Para uso comercial em produção, recomenda-se migrar o banco JSON para PostgreSQL/MySQL e implementar autenticação com senha criptografada, HTTPS, backups e integração oficial de WhatsApp/pagamentos.
