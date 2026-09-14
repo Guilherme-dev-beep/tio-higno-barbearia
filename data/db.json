@@ -163,6 +163,12 @@
     "whatsapp": "556499662-8700",
     "address": "Av. Minas Gerais, Qd l1 lote 03",
     "instagram": "@tiohignobarbearia",
-    "adminPassword": "Barber12"
+    "adminPassword": "Barber12",
+    "adminRecoveryCode": "",
+    "adminRecoveryPhone": "5564996672502",
+    "adminRecoveryCodeExpiresAt": null,
+    "adminLoginLimit": 3,
+    "adminLoginAttempts": 0,
+    "adminLoginLocked": false
   }
 }

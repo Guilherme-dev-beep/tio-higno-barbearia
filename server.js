@@ -65,6 +65,7 @@ function initDatabase(){
     );
   `);
 
+
   const settingsRow = database.prepare('SELECT COUNT(*) AS count FROM settings').get();
   if (!settingsRow.count) {
     const seed = JSON.parse(fs.readFileSync(DB_JSON_PATH, 'utf8'));
@@ -161,6 +162,7 @@ const clean = (v='', max=160) => String(v).replace(/[<>]/g,'').trim().slice(0,ma
 const validDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d||'');
 const validTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t||'');
 const toMin = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
+const generateOtp = () => String(crypto.randomInt(100000, 1000000));
 const DEFAULT_START = '08:00';
 const DEFAULT_END = '22:00';
 const BUSINESS_TZ = 'America/Sao_Paulo';
@@ -221,6 +223,10 @@ async function sendWhatsAppConfirmation(booking,service,barber,settings){
 function json(res, status, data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));}
 function parseBody(req){return new Promise((resolve,reject)=>{let body='';req.on('data',c=>{body+=c;if(body.length>1e6){req.destroy();reject(new Error('Payload muito grande'));}});req.on('end',()=>{if(!body)return resolve({});try{resolve(JSON.parse(body));}catch(e){console.error('JSON parse failed:', body);reject(new Error('JSON inválido'));}});req.on('error',reject);});}
 function adminOK(req){return req.headers['x-admin-password']===readDb().settings.adminPassword;}
+function normalizePhone(input=''){const digits=String(input).replace(/\D/g,'');if(!digits)return '';if(digits.length===11)return '55'+digits;if(digits.length===10)return '55'+digits;if(digits.length>11&&digits.startsWith('55'))return digits;return digits.startsWith('0')?digits.slice(1):digits;}
+function publicSettings(settings={}){const redacted={...settings};delete redacted.adminPassword;delete redacted.adminRecoveryCode;delete redacted.adminRecoveryPhone;delete redacted.adminRecoveryCodeExpiresAt;delete redacted.adminRecoveryUsedAt;delete redacted.adminLoginAttempts;delete redacted.adminLoginLocked;delete redacted.adminLockedAt;delete redacted.adminRecoveryRequired;return redacted;}
+function adminSettingsForClient(settings={}){const redacted={...settings};delete redacted.adminPassword;delete redacted.adminRecoveryCode;delete redacted.adminRecoveryPhone;delete redacted.adminRecoveryCodeExpiresAt;delete redacted.adminRecoveryUsedAt;delete redacted.adminLoginAttempts;delete redacted.adminLoginLocked;delete redacted.adminLockedAt;delete redacted.adminRecoveryRequired;return redacted;}
+function codesMatch(expected, received){const expectedBuffer=Buffer.from(String(expected||''));const receivedBuffer=Buffer.from(String(received||''));return expectedBuffer.length===receivedBuffer.length&&crypto.timingSafeEqual(expectedBuffer,receivedBuffer);}
 
 function scheduleReminder(booking, service, barber, settings){
   const bookingDate = new Date(`${booking.date}T${booking.time}:00`);
@@ -264,12 +270,42 @@ async function sendWhatsAppMessage({ to, text }, settings){
   if(!response.ok) throw new Error(`WhatsApp API retornou HTTP ${response.status}`);
 }
 
+async function sendAdminRecoveryCode(phone, code, settings){
+  const cleanPhone = String(phone || '').replace(/\D/g, '');
+  if(!cleanPhone) return { sent: false, code };
+  const recipient = cleanPhone.length === 10 ? '55' + cleanPhone : cleanPhone;
+  const message = `Seu código de recuperação do painel Tio Higno Barbearia: ${code}\nVálido por 5 minutos.`;
+
+  if(!settings.whatsappEnabled || !settings.whatsappToken || !settings.whatsappPhoneId){
+    console.log(`2FA_SIMULADO ${recipient}: ${code}`);
+    return { sent: false, code };
+  }
+
+  const version = settings.whatsappApiVersion || 'v20.0';
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: recipient,
+    type: 'text',
+    text: { body: message }
+  };
+
+  const response = await fetch(`https://graph.facebook.com/${version}/${settings.whatsappPhoneId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${settings.whatsappToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if(!response.ok) throw new Error(`WhatsApp API retornou HTTP ${response.status}`);
+  return { sent: true, code };
+}
+
+
 function serveFile(req,res,pathname){let rel=pathname==='/'?'index.html':pathname==='/admin'?'admin.html':pathname.replace(/^\//,'');let file=path.normalize(path.join(PUBLIC,rel));if(!file.startsWith(PUBLIC))return false;if(!fs.existsSync(file)||!fs.statSync(file).isFile())return false;res.writeHead(200,{'Content-Type':MIME[path.extname(file)]||'application/octet-stream'});fs.createReadStream(file).pipe(res);return true;}
 
 async function handleApi(req,res,url){
   const p=url.pathname, method=req.method;
   if(method==='GET'&&p==='/api/bootstrap'){
-    const db=readDb(),{adminPassword,...settings}=db.settings;return json(res,200,{services:db.services.filter(s=>s.active),barbers:db.barbers.filter(b=>b.active),settings});
+    const db=readDb();return json(res,200,{services:db.services.filter(s=>s.active),barbers:db.barbers.filter(b=>b.active),settings:publicSettings(db.settings)});
   }
   if(method==='GET'&&p==='/api/availability'){
     const date=url.searchParams.get('date'),barberId=url.searchParams.get('barberId'),serviceId=url.searchParams.get('serviceId');
@@ -315,20 +351,97 @@ async function handleApi(req,res,url){
     const booking={id:crypto.randomUUID(),code:`TH-${Math.random().toString(36).slice(2,7).toUpperCase()}`,serviceId:x.serviceId,barberId:x.barberId,date:x.date,time:x.time,duration:service.duration,price:service.price,name:clean(x.name,80),phone:clean(x.phone,30),notes:clean(x.notes,240),status:'confirmed',createdAt:new Date().toISOString()};db.bookings.push(booking);writeDb(db);sendWhatsAppConfirmation(booking,service,barber,db.settings).catch(e=>console.error('Falha ao enviar confirmação pelo WhatsApp:',e.message));scheduleReminder(booking, service, barber, db.settings);
     return json(res,201,{booking,service,barber});
   }
-  if(method==='POST'&&p==='/api/admin/login'){const x=await parseBody(req),db=readDb();return x.password===db.settings.adminPassword?json(res,200,{ok:true}):json(res,401,{error:'Senha inválida.'});}
+  if(method==='POST'&&p==='/api/admin/recovery/request'){
+    const x=await parseBody(req),db=readDb();
+    const phone = normalizePhone(x.phone || db.settings.adminRecoveryPhone || db.settings.phone || '');
+    if(!phone) return json(res,400,{error:'Número para envio do código não informado.'});
+    const now=Date.now();
+    const lastSentAt=Date.parse(db.settings.adminRecoveryLastSentAt||'')||0;
+    const windowStartedAt=Date.parse(db.settings.adminRecoveryWindowStartedAt||'')||0;
+    const requestsInWindow=Number(db.settings.adminRecoveryRequestsInWindow||0);
+    if(lastSentAt&&now-lastSentAt<60*1000)return json(res,429,{error:'Aguarde 1 minuto antes de solicitar outro código.'});
+    if(!windowStartedAt||now-windowStartedAt>=60*60*1000){db.settings.adminRecoveryWindowStartedAt=new Date(now).toISOString();db.settings.adminRecoveryRequestsInWindow=0;}
+    if(Number(db.settings.adminRecoveryRequestsInWindow||requestsInWindow)>=5)return json(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
+    const code = generateOtp();
+    db.settings.adminRecoveryCode = code;
+    db.settings.adminRecoveryPhone = phone;
+    db.settings.adminRecoveryCodeExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    db.settings.adminRecoveryRequestedAt = new Date().toISOString();
+    db.settings.adminRecoveryLastSentAt = new Date(now).toISOString();
+    db.settings.adminRecoveryRequestsInWindow = Number(db.settings.adminRecoveryRequestsInWindow||0)+1;
+    db.settings.adminRecoveryAttempts = 0;
+    writeDb(db);
+    try {
+      const result = await sendAdminRecoveryCode(db.settings.adminRecoveryPhone, code, db.settings);
+      return json(res,200,{ok:true, sent: result.sent});
+    } catch (e) {
+      console.error('Falha ao enviar 2FA por WhatsApp:', e.message);
+      return json(res,200,{ok:true, sent:false});
+    }
+  }
+  if(method==='POST'&&p==='/api/admin/recovery'){
+    const x=await parseBody(req),db=readDb();
+    const phone = normalizePhone(String(x.phone || db.settings.adminRecoveryPhone || ''));
+    const recoveryCode=String(x.recoveryCode||'').trim();
+    const newPassword=String(x.newPassword||'').trim();
+    if(!recoveryCode || newPassword.length<4)return json(res,400,{error:'Informe o código recebido e uma nova senha com no mínimo 4 caracteres.'});
+    if(phone && db.settings.adminRecoveryPhone && phone !== normalizePhone(db.settings.adminRecoveryPhone)) return json(res,400,{error:'Número de recuperação inválido para esta sessão.'});
+    if(Number(db.settings.adminRecoveryAttempts||0)>=5){db.settings.adminRecoveryCode='';db.settings.adminRecoveryCodeExpiresAt=null;writeDb(db);return json(res,429,{error:'Limite de tentativas atingido. Solicite um novo código.'});}
+    const isValidCode = codesMatch(db.settings.adminRecoveryCode, recoveryCode);
+    const expiresAt = db.settings.adminRecoveryCodeExpiresAt ? new Date(db.settings.adminRecoveryCodeExpiresAt).getTime() : 0;
+    const isExpired = !db.settings.adminRecoveryCodeExpiresAt || Date.now() > expiresAt;
+    if(!isValidCode || isExpired){db.settings.adminRecoveryAttempts=Number(db.settings.adminRecoveryAttempts||0)+1;if(isExpired||db.settings.adminRecoveryAttempts>=5){db.settings.adminRecoveryCode='';db.settings.adminRecoveryCodeExpiresAt=null;}writeDb(db);return json(res,401,{error:'Código de verificação inválido ou expirado.'});}
+    db.settings.adminPassword=newPassword;
+    db.settings.adminLoginAttempts=0;
+    db.settings.adminLoginLocked=false;
+    db.settings.adminRecoveryUsedAt=new Date().toISOString();
+    db.settings.adminRecoveryCode='';
+    db.settings.adminRecoveryCodeExpiresAt=null;
+    db.settings.adminRecoveryPhone='';
+    db.settings.adminRecoveryRequestedAt=null;
+    db.settings.adminRecoveryAttempts=0;
+    writeDb(db);
+    return json(res,200,{ok:true});
+  }
+  if(method==='POST'&&p==='/api/admin/login'){
+    const x=await parseBody(req),db=readDb();
+    const settings=db.settings||{};
+    const limit=Number(settings.adminLoginLimit || 3);
+    if(settings.adminLoginLocked===true){
+      return json(res,403,{error:'Painel bloqueado. Use o código de recuperação para redefinir a senha.'});
+    }
+    if(x.password===settings.adminPassword){
+      settings.adminLoginAttempts=0;
+      settings.adminLoginLocked=false;
+      settings.adminLockedAt=null;
+      writeDb(db);
+      return json(res,200,{ok:true});
+    }
+    const attempts=Number(settings.adminLoginAttempts||0)+1;
+    settings.adminLoginAttempts=attempts;
+    if(attempts>=limit){
+      settings.adminLoginLocked=true;
+      settings.adminLockedAt=new Date().toISOString();
+      settings.adminRecoveryRequired=true;
+      writeDb(db);
+      return json(res,403,{error:'Senha incorreta. Você errou 3 vezes. Use o código de recuperação.'});
+    }
+    writeDb(db);
+    return json(res,401,{error:`Senha inválida. Restam ${limit-attempts} tentativa(s).`});
+  }
   if(p.startsWith('/api/admin/')&&!adminOK(req))return json(res,401,{error:'Senha inválida.'});
-  if(method==='GET'&&p==='/api/admin/data'){const db=readDb(),{adminPassword,...settings}=db.settings;return json(res,200,{...db,settings});}
+  if(method==='GET'&&p==='/api/admin/data'){const db=readDb();return json(res,200,{...db,settings:adminSettingsForClient(db.settings)});}
   let m=p.match(/^\/api\/admin\/bookings\/([^/]+)$/);if(method==='PATCH'&&m){const x=await parseBody(req),db=readDb(),b=db.bookings.find(v=>v.id===m[1]);if(!b)return json(res,404,{error:'Agendamento não encontrado.'});if(['confirmed','completed','cancelled'].includes(x.status))b.status=x.status;writeDb(db);return json(res,200,{booking:b});}if(method==='DELETE'&&m){const db=readDb(),index=db.bookings.findIndex(v=>v.id===m[1]);if(index<0)return json(res,404,{error:'Agendamento não encontrado.'});db.bookings.splice(index,1);writeDb(db);return json(res,200,{ok:true});}
   if(method==='POST'&&p==='/api/admin/block'){const x=await parseBody(req);if(!validDate(x.date)||!validTime(x.time)||!x.barberId)return json(res,400,{error:'Dados inválidos.'});const db=readDb(),block={id:crypto.randomUUID(),date:x.date,time:x.time,barberId:x.barberId,duration:Number(x.duration||30),reason:clean(x.reason||'Bloqueado pelo admin',100)};db.blockedSlots.push(block);writeDb(db);return json(res,201,block);}
   m=p.match(/^\/api\/admin\/block\/([^/]+)$/);if(method==='DELETE'&&m){const db=readDb();db.blockedSlots=db.blockedSlots.filter(v=>v.id!==m[1]);writeDb(db);return json(res,200,{ok:true});}
   if(method==='POST'&&p==='/api/admin/services'){const x=await parseBody(req),db=readDb(),s={id:crypto.randomUUID(),name:clean(x.name,80),description:clean(x.description,140),duration:Number(x.duration||30),price:Number(x.price||0),icon:clean(x.icon||'✂️',8),active:true};if(!s.name||s.duration<5||s.price<0)return json(res,400,{error:'Serviço inválido.'});db.services.push(s);writeDb(db);return json(res,201,s);}
   m=p.match(/^\/api\/admin\/services\/([^/]+)$/);if(method==='PATCH'&&m){const x=await parseBody(req),db=readDb(),s=db.services.find(v=>v.id===m[1]);if(!s)return json(res,404,{error:'Serviço não encontrado.'});['name','description','icon'].forEach(k=>{if(x[k]!==undefined)s[k]=clean(x[k],k==='description'?140:80)});['duration','price'].forEach(k=>{if(x[k]!==undefined)s[k]=Number(x[k])});if(x.active!==undefined)s.active=Boolean(x.active);writeDb(db);return json(res,200,s);}
   if(method==='DELETE'&&m){const db=readDb(),hasBookings=db.bookings.some(v=>v.serviceId===m[1]);if(hasBookings)return json(res,409,{error:'Não é possível excluir um serviço com agendamentos. Inative-o em Editar.'});const index=db.services.findIndex(v=>v.id===m[1]);if(index<0)return json(res,404,{error:'Serviço não encontrado.'});db.services.splice(index,1);writeDb(db);return json(res,200,{ok:true});}
-  if(method==='POST'&&p==='/api/admin/barbers'){const x=await parseBody(req),db=readDb(),b={id:crypto.randomUUID(),name:clean(x.name,70),role:clean(x.role||'Barbeiro',70),initials:clean(x.initials||'TH',3).toUpperCase(),workDays:Array.isArray(x.workDays)?x.workDays:[1,2,3,4,5,6],start:validTime(x.start)?x.start:DEFAULT_START,end:validTime(x.end)?x.end:DEFAULT_END,workPeriods:normalizeWorkPeriods([[DEFAULT_START, '12:00'], ['13:00', DEFAULT_END]]),active:true};if(!b.name)return json(res,400,{error:'Nome obrigatório.'});db.barbers.push(b);writeDb(db);return json(res,201,b);}
+  if(method==='POST'&&p==='/api/admin/barbers'){const x=await parseBody(req),db=readDb(),b={id:crypto.randomUUID(),name:clean(x.name,70),role:clean(x.role||'Barbeiro',70),initials:clean(x.initials||'TH',3).toUpperCase(),workDays:Array.isArray(x.workDays)?x.workDays:[1,2,3,4,5,6],start:validTime(x.start)?x.start:DEFAULT_START,end:validTime(x.end)?x.end:DEFAULT_END,workPeriods:normalizeWorkPeriods(Array.isArray(x.workPeriods)?x.workPeriods:[[DEFAULT_START,'12:00'],['13:00',DEFAULT_END]]),active:true};if(!b.name)return json(res,400,{error:'Nome obrigatório.'});db.barbers.push(b);writeDb(db);return json(res,201,b);}
   m=p.match(/^\/api\/admin\/barbers\/([^/]+)$/);if(method==='PATCH'&&m){const x=await parseBody(req),db=readDb(),b=db.barbers.find(v=>v.id===m[1]);if(!b)return json(res,404,{error:'Barbeiro não encontrado.'});['name','role','initials'].forEach(k=>{if(x[k]!==undefined)b[k]=clean(x[k],70)});if(validTime(x.start))b.start=x.start;if(validTime(x.end))b.end=x.end;if(Array.isArray(x.workPeriods))b.workPeriods=normalizeWorkPeriods(x.workPeriods);if(Array.isArray(x.workDays))b.workDays=x.workDays.map(Number);if(x.active!==undefined)b.active=Boolean(x.active);writeDb(db);return json(res,200,b);}
   if(method==='DELETE'&&m){const db=readDb(),hasBookings=db.bookings.some(v=>v.barberId===m[1]);if(hasBookings)return json(res,409,{error:'Não é possível excluir um barbeiro com agendamentos. Inative-o em Editar.'});const index=db.barbers.findIndex(v=>v.id===m[1]);if(index<0)return json(res,404,{error:'Barbeiro não encontrado.'});db.barbers.splice(index,1);writeDb(db);return json(res,200,{ok:true});}
   m=p.match(/^\/api\/admin\/clients\/(.+)$/);if(method==='DELETE'&&m){const phone=decodeURIComponent(m[1]),db=readDb(),before=db.bookings.length;db.bookings=db.bookings.filter(v=>v.phone!==phone);if(before===db.bookings.length)return json(res,404,{error:'Cliente não encontrado.'});writeDb(db);return json(res,200,{ok:true});}
-  if(method==='PATCH'&&p==='/api/admin/settings'){const x=await parseBody(req),db=readDb();['businessName','tagline','phone','whatsapp','address','instagram','whatsappPhoneId','whatsappToken','whatsappApiVersion','whatsappTemplate','whatsappLanguage'].forEach(k=>{if(x[k]!==undefined)db.settings[k]=clean(x[k],k==='whatsappToken'?500:120)});if(x.whatsappEnabled!==undefined)db.settings.whatsappEnabled=Boolean(x.whatsappEnabled);if(x.adminPassword&&String(x.adminPassword).length>=4)db.settings.adminPassword=String(x.adminPassword);writeDb(db);return json(res,200,{ok:true});}
+  if(method==='PATCH'&&p==='/api/admin/settings'){const x=await parseBody(req),db=readDb();['businessName','tagline','phone','whatsapp','address','instagram','whatsappPhoneId','whatsappToken','whatsappApiVersion','whatsappTemplate','whatsappLanguage'].forEach(k=>{if(x[k]!==undefined)db.settings[k]=clean(x[k],k==='whatsappToken'?500:120)});if(x.whatsappEnabled!==undefined)db.settings.whatsappEnabled=Boolean(x.whatsappEnabled);if(x.adminPassword&&String(x.adminPassword).length>=4)db.settings.adminPassword=String(x.adminPassword);if(x.adminLoginLimit!==undefined){const v=Number(x.adminLoginLimit);db.settings.adminLoginLimit=isFinite(v)&&v>=1?Math.floor(v):3;}writeDb(db);return json(res,200,{ok:true});}
   return json(res,404,{error:'Rota não encontrada.'});
 }
 

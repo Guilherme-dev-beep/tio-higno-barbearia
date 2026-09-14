@@ -20,6 +20,17 @@
   <div class="login-card">
     <img class="logo-image" src="/logo.png.png" alt="Tio Higno Barbearia" /><span>PAINEL ADMINISTRATIVO</span><h1>Tio Higno<br><em>Barbearia.</em></h1><p>Gerencie agenda, clientes e operação em um só lugar.</p>
     <form id="loginForm"><label>Senha administrativa</label><input id="password" type="password" placeholder="Digite sua senha" required><button>Entrar no painel →</button></form>
+    <div class="recovery-link-wrap"><button id="recoveryToggle" class="recovery-toggle">Esqueci a senha</button></div>
+    <div id="recoveryBox" class="recovery-box hidden">
+      <div class="recovery-title">2FA por WhatsApp</div>
+      <div class="form-grid compact">
+        <div class="field full"><label>Número do WhatsApp</label><input id="recoveryPhone" type="text" value="64996672502" placeholder="Informe o celular"></div>
+        <div class="field full"><label>Código recebido no WhatsApp</label><input id="recoveryCode" type="text" placeholder="Digite o código"></div>
+        <div class="field full"><label>Nova senha</label><input id="recoveryPassword" type="password" placeholder="Mínimo 4 caracteres"></div>
+      </div>
+      <button id="recoverySendCode" class="action-btn" type="button">Enviar código</button>
+      <button id="recoverySubmit" class="action-btn" type="button">Redefinir senha</button>
+    </div>
     <a href="/">← Voltar para o site</a>
   </div>
 </div>

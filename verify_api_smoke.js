@@ -65,6 +65,16 @@ function request(method, path, headers = {}, body) {
 
   const password = 'Barber12';
 
+  const recoveryRequest = await request('POST', '/api/admin/recovery/request', {}, { phone: '64996672502' });
+  console.log('recoveryRequest', recoveryRequest.status, recoveryRequest.data.ok, 'codeInResponse', Object.prototype.hasOwnProperty.call(recoveryRequest.data, 'code'));
+
+  if (recoveryRequest.data.ok && Object.prototype.hasOwnProperty.call(recoveryRequest.data, 'code')) process.exitCode = 1;
+
+  const adminDataBeforeLogin = await request('GET', '/api/admin/data', { 'x-admin-password': password });
+  const recoverySecretExposed = !!adminDataBeforeLogin.data.settings && ('adminRecoveryCode' in adminDataBeforeLogin.data.settings || 'adminRecoveryCodeExpiresAt' in adminDataBeforeLogin.data.settings || 'adminRecoveryPhone' in adminDataBeforeLogin.data.settings);
+  console.log('adminDataSensitiveFields', recoverySecretExposed ? 'exposed' : 'hidden');
+  if (recoverySecretExposed) process.exitCode = 1;
+
   const login = await request('POST', '/api/admin/login', {}, { password });
   console.log('login', login.status, login.data.ok ? 'ok' : login.data.error);
 
